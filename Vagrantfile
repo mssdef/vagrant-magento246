@@ -70,6 +70,8 @@ Vagrant.configure("2") do |config|
     ### SETUP ENV
     source /vagrant/cfg/auth.values
 
+		BASE_URL='http://192.168.33.10'
+
     #
     # Install necessary packages
     sudo yum install -y epel-release
@@ -144,16 +146,15 @@ EOF
 
     nice -n20 php bin/magento setup:upgrade; bin/magento setup:di:compile; php bin/magento cron:run; php bin/magento indexer:reset; php bin/magento indexer:reindex; php bin/magento cache:disable full_page; bin/magento cache:clean; chmod -R 777 var/ pub/ generated/; echo > var/log/debug.log; echo > var/log/system.log; echo > var/log/support_report.log; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_all/_settings -d '{"index.blocks.read_only_allow_delete": null}'; php bin/magento indexer:reindex;
 
-		BASE_URL='http://192.168.33.10'
-    ADMIN_URL=`cat app/etc/env.php |grep admin|awk '{print $3}'| sed "s/'//g"`
-		echo "Magento web is running: ${BASE_URL}"
-		echo "Admin magento: ${BASE_URL}/${ADMIN_URL}"
-    echo "${MAGENTO_ADMIN_USER} / ${MAGENTO_ADMIN_PASS}"
-
     # Post update
     php bin/magento module:disable Magento_TwoFactorAuth Magento_AdminAdobeImsTwoFactorAuth
     php bin/magento c:f
     chmod -R 777 var/ generated/ pub
+
+    ADMIN_URL=`cat app/etc/env.php |grep admin|awk '{print $3}'| sed "s/'//g"`
+		echo "Magento web is running: ${BASE_URL}"
+		echo "Admin magento: ${BASE_URL}/${ADMIN_URL}"
+    echo "${MAGENTO_ADMIN_USER} / ${MAGENTO_ADMIN_PASS}"
 
   SHELL
 end
