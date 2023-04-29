@@ -1,0 +1,4 @@
+MAGENTO_ADMIN_USER='admin'
+MAGENTO_ADMIN_PASS='admin123'
+ADOBE_AUTH_KEY='your_magento_key'
+ADOBE_AUTH_SECRET='your_magento_secret'
