@@ -2,3 +2,4 @@
 *.swo
 .vagrant
 /cfg/auth.values
+/cfg/config.env

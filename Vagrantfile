@@ -1,13 +1,34 @@
-# Vagrant configuration is done below. The "2" in Vagrant.configure
-# configures the configuration version (we support older styles for
+# v2022-05-01
+# Read env file from cfg/config.env
+env = {}
+File.read("cfg/config.env").split("\n").each do |ef|
+  env[ef.split("=")[0]] = ef.split("=")[1]
+end
+
 Vagrant.configure("2") do |config|
+  config.hostmanager.enabled = true;
+  config.hostmanager.manage_host = true;
+  config.vm.box = "geerlingguy/centos7"
+
+  ### Config RabbitMQ
+  config.vm.define "rmq01" do |rmq01|
+    rmq01.vm.network "private_network", ip: env['RABBITMQ_HOST']
+    rmq01.vm.hostname = "rmq01"
+  end
+
+  ### Config Memcached
+  config.vm.define "mc01" do |mc01|
+    mc01.vm.network "private_network", ip: env['MEMCACHED_HOST']
+    mc01.vm.hostname = "mc01"
+  end
+
   ### Config MySQL
   config.vm.define "db01" do |db01|
-    db01.vm.box = "geerlingguy/centos7"
-
-    db01.vm.network "private_network", ip: "192.168.33.9"
+    db01.vm.network "private_network", ip: env['MYSQL_HOST']
+    db01.vm.hostname = "db01"
     db01.vm.network "public_network", bridge: "en0: Wi-Fi (Wireless)"
     db01.vm.synced_folder "../data", "/vagrant_data"
+
     # NOTE: This will enable public access to the opened port
     # db01.vm.network "forwarded_port", guest: 80, host: 8080
     # via 127.0.0.1 to disable public access
@@ -37,15 +58,14 @@ EOF
 
   ### Config Magento
   config.vm.define "web01" do |web01|
-    web01.vm.box = "geerlingguy/centos7"
-
     # NOTE: This will enable public access to the opened port
     # config.vm.network "forwarded_port", guest: 80, host: 8080
     # via 127.0.0.1 to disable public access
     # config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
 
-    web01.vm.network "private_network", ip: "192.168.33.10"
+    web01.vm.network "private_network", ip: env['MAGENTO_HOST']
     web01.vm.network "public_network", bridge: "en0: Wi-Fi (Wireless)"
+    web01.vm.hostname = "web01"
     web01.vm.synced_folder "../data", "/vagrant_data"
 
     web01.vm.provider "virtualbox" do |vb|
@@ -58,9 +78,9 @@ EOF
       sudo yum update -y
 
       ### SETUP ENV
-      source /vagrant/cfg/auth.values
-      MYSQL_IP='192.168.33.9'
-      BASE_URL='http://192.168.33.10'
+      source /vagrant/cfg/config.env
+      MYSQL_IP="db01"
+      BASE_URL="http://${MAGENTO_HOST}"
 
       #
       # Install necessary packages
@@ -134,5 +154,4 @@ EOF
       echo "${MAGENTO_ADMIN_USER} / ${MAGENTO_ADMIN_PASS}"
     SHELL
   end
-
 end
