@@ -14,12 +14,37 @@ Vagrant.configure("2") do |config|
   config.vm.define "rmq01" do |rmq01|
     rmq01.vm.network "private_network", ip: env['RABBITMQ_HOST']
     rmq01.vm.hostname = "rmq01"
+
+    rmq01.vm.provision "shell", inline: <<-SHELL
+      sudo yum -y install epel-release
+      sudo yum -y update
+
+      wget http://packages.erlang-solutions.com/erlang-solutions-2.0-1.noarch.rpm
+      sudo rpm -Uvh erlang-solutions-2.0-1.noarch.rpm
+      sudo yum -y install erlang socat logrotate
+
+      wget https://github.com/rabbitmq/rabbitmq-server/releases/download/v3.8.35/rabbitmq-server-3.8.35-1.el8.noarch.rpm
+      sudo rpm --import https://www.rabbitmq.com/rabbitmq-signing-key-public.asc
+      sudo rpm -Uvh rabbitmq-server-3.8.35-1.el8.noarch.rpm
+
+      sudo systemctl start rabbitmq-server
+      sudo systemctl enable rabbitmq-server
+    SHELL
   end
 
   ### Config Memcached
   config.vm.define "mc01" do |mc01|
     mc01.vm.network "private_network", ip: env['MEMCACHED_HOST']
     mc01.vm.hostname = "mc01"
+
+    mc01.vm.provision "shell", inline: <<-SHELL
+      # Install Memcache
+      yum install memcached -y
+
+      systemctl start memcached
+      systemctl enable memcached
+      systemctl status memcached
+    SHELL
   end
 
   ### Config MySQL
@@ -86,15 +111,12 @@ EOF
       # Install necessary packages
       sudo yum install -y epel-release
       sudo yum install -y vim
-      sudo yum install -y git nano wget unzip zip curl httpd 
+      sudo yum install -y git nano wget unzip zip curl 
+      sudo yum -y install nginx
 
       sudo yum install -y http://rpms.remirepo.net/enterprise/remi-release-7.rpm
       sudo yum-config-manager --enable remi-php81
       sudo yum install -y php php-cli php-fpm php-mysqlnd php-opcache php-gd php-curl php-mbstring php-xml php-pear php-bcmath php-json php-common php-intl php-mysqlnd php-soap php-xml php-xsl php-zip
-
-      # Start and enable Apache and MariaDB
-      sudo systemctl start httpd
-      sudo systemctl enable httpd
 
       # Install composer
       curl -sS https://getcomposer.org/installer | php
@@ -131,16 +153,33 @@ EOF
       ## Blank Magento
       sudo php bin/magento setup:install --base-url="${BASE_URL}/" --db-host=${MYSQL_IP} --db-name=magento --db-user=magento --db-password='password' --admin-firstname=admin --admin-lastname=admin --admin-email=admin@example.com --admin-user=${MAGENTO_ADMIN_USER} --admin-password=${MAGENTO_ADMIN_PASS} --language=en_US --currency=USD --timezone=America/New_York --use-rewrites=1
 
-      echo "ServerName localhost" >> /etc/httpd/conf/httpd.conf
-      sed -i "s/AllowOverride None/AllowOverride All/g" /etc/httpd/conf/httpd.conf
-      systemctl restart httpd
+      # Configure Nginx
+      rm /etc/nginx/nginx.conf
+			cp /vagrant_data/cfg/nginx.conf /etc/nginx/nginx.conf
+      nginx -t
+
+      echo "# Start Nginx"
+      systemctl start nginx
+      systemctl enable nginx
+      systemctl status nginx
 
       # Change memory_limit for PHP
-      new_value="2512M"
-      line_number=$(grep -n "^memory_limit" /etc/php.ini | cut -d':' -f1)
-      sed -i "${line_number}s/.*/memory_limit = ${new_value}/" /etc/php.ini
-      echo "PHP: memory_limit has been changed to ${new_value} in /etc/php.ini"
+      echo "PHP: memory_limit has been changed in /etc/php.ini"
+      if [ ! -f "/etc/php.ini" ]; then
+        cp /vagrant_data/cfg/php.ini /etc/
+        cp /vagrant_data/cfg/www.conf /etc/php-fpm.d/
+      fi
 
+      mkdir -p /var/lib/php/session/
+      mkdir -p /run/php-fpm/
+      chown -R apache:apache /run/php-fpm/ /var/lib/php/session/
+      chmod -R 777 /var/lib/php/session
+      systemctl start php-fpm
+      systemctl enable php-fpm
+
+      netstat -pl | grep php-fpm.sock
+
+      ## Compile Magento app
       nice -n20 php bin/magento setup:upgrade; bin/magento setup:di:compile; php bin/magento cron:run; php bin/magento indexer:reset; php bin/magento indexer:reindex; php bin/magento cache:disable full_page; bin/magento cache:clean; chmod -R 777 var/ pub/ generated/; echo > var/log/debug.log; echo > var/log/system.log; echo > var/log/support_report.log; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_all/_settings -d '{"index.blocks.read_only_allow_delete": null}'; php bin/magento indexer:reindex;
 
       # Post update
