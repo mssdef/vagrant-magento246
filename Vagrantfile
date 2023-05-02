@@ -103,6 +103,7 @@ EOF
       sudo yum update -y
 
       ### SETUP ENV
+      #
       source /vagrant/cfg/config.env
       MYSQL_IP="db01"
       BASE_URL="http://${MAGENTO_HOST}"
@@ -135,23 +136,24 @@ EOF
       #sudo -u apache composer create-project --repository-url=https://repo.magento.com/ magento/project-community-edition ./
       
 
-      # install opensearch/elasticsearch
-      wget -q https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.7.0-x86_64.rpm
-      sudo rpm --install elasticsearch-8.7.0-x86_64.rpm
-
-      rm -f /etc/elasticsearch/elasticsearch.yml
-      cp /vagrant/cfg/elasticsearch.yml /etc/elasticsearch/elasticsearch.yml
-      sudo systemctl enable elasticsearch
-      sudo systemctl start elasticsearch
+      # install opensearch
+      #
+      sudo curl -SL https://artifacts.opensearch.org/releases/bundle/opensearch/2.x/opensearch-2.x.repo -o /etc/yum.repos.d/opensearch-2.x.repo
+      sudo yum clean all
+      sudo yum repolist
+      sudo yum install opensearch -y
+      echo "plugins.security.disabled: true" >> /etc/opensearch/opensearch.yml
+      systemctl start opensearch 
+      systemctl enable opensearch 
+      systemctl status opensearch 
 
       ## Details log
       pwd
       ls -la
       echo "Start Magento Configuration"
 
-
       ## Blank Magento
-      sudo php bin/magento setup:install --base-url="${BASE_URL}/" --db-host=${MYSQL_IP} --db-name=magento --db-user=magento --db-password='password' --admin-firstname=admin --admin-lastname=admin --admin-email=admin@example.com --admin-user=${MAGENTO_ADMIN_USER} --admin-password=${MAGENTO_ADMIN_PASS} --language=en_US --currency=USD --timezone=America/New_York --use-rewrites=1
+      sudo php bin/magento setup:install --base-url="${BASE_URL}/" --db-host=${MYSQL_IP} --db-name=magento --db-user=magento --db-password='password' --admin-firstname=admin --admin-lastname=admin --admin-email=admin@example.com --admin-user=${MAGENTO_ADMIN_USER} --admin-password=${MAGENTO_ADMIN_PASS} --language=en_US --currency=USD --timezone=America/New_York --use-rewrites=1 
 
       # Configure Nginx
       rm /etc/nginx/nginx.conf
@@ -165,10 +167,9 @@ EOF
 
       # Change memory_limit for PHP
       echo "PHP: memory_limit has been changed in /etc/php.ini"
-      if [ ! -f "/etc/php.ini" ]; then
-        cp /vagrant_data/cfg/php.ini /etc/
-        cp /vagrant_data/cfg/www.conf /etc/php-fpm.d/
-      fi
+      rm -rf /etc/php.ini /etc/php-fpm.d/www.conf
+      cp /vagrant_data/cfg/php.ini /etc/
+      cp /vagrant_data/cfg/www.conf /etc/php-fpm.d/
 
       mkdir -p /var/lib/php/session/
       mkdir -p /run/php-fpm/
@@ -176,10 +177,11 @@ EOF
       chmod -R 777 /var/lib/php/session
       systemctl start php-fpm
       systemctl enable php-fpm
-
+      systemctl status php-fpm
       netstat -pl | grep php-fpm.sock
 
       ## Compile Magento app
+      ## magento reset cache
       nice -n20 php bin/magento setup:upgrade; bin/magento setup:di:compile; php bin/magento cron:run; php bin/magento indexer:reset; php bin/magento indexer:reindex; php bin/magento cache:disable full_page; bin/magento cache:clean; chmod -R 777 var/ pub/ generated/; echo > var/log/debug.log; echo > var/log/system.log; echo > var/log/support_report.log; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_all/_settings -d '{"index.blocks.read_only_allow_delete": null}'; php bin/magento indexer:reindex;
 
       # Post update
