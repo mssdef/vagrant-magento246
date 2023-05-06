@@ -111,7 +111,7 @@ EOF
       #
       # Install necessary packages
       sudo yum install -y epel-release
-      sudo yum install -y vim
+      sudo yum install -y vim mariadb
       sudo yum install -y git nano wget unzip zip curl 
       sudo yum -y install nginx
 
@@ -154,6 +154,7 @@ EOF
 
       ## Blank Magento
       sudo php bin/magento setup:install --base-url="${BASE_URL}/" --db-host=${MYSQL_IP} --db-name=magento --db-user=magento --db-password='password' --admin-firstname=admin --admin-lastname=admin --admin-email=admin@example.com --admin-user=${MAGENTO_ADMIN_USER} --admin-password=${MAGENTO_ADMIN_PASS} --language=en_US --currency=USD --timezone=America/New_York --use-rewrites=1 
+      mysql -h db01 -u magento -ppassword magento < /vagrant_data/builds/db00.sql
 
       # Configure Nginx
       rm /etc/nginx/nginx.conf
@@ -182,7 +183,7 @@ EOF
 
       ## Compile Magento app
       ## magento reset cache
-      nice -n20 php bin/magento setup:upgrade; bin/magento setup:di:compile; php bin/magento cron:run; php bin/magento indexer:reset; php bin/magento indexer:reindex; php bin/magento cache:disable full_page; bin/magento cache:clean; chmod -R 777 var/ pub/ generated/; echo > var/log/debug.log; echo > var/log/system.log; echo > var/log/support_report.log; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_all/_settings -d '{"index.blocks.read_only_allow_delete": null}'; php bin/magento indexer:reindex;
+      systemctl restart opensearch; nice -n20 php bin/magento setup:upgrade; bin/magento setup:di:compile; php bin/magento cron:run; php bin/magento indexer:reset; php bin/magento indexer:reindex; php bin/magento cache:disable full_page; bin/magento cache:clean; chmod -R 777 var/ pub/ generated/; echo > var/log/debug.log; echo > var/log/system.log; echo > var/log/support_report.log; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_cluster/settings -d '{ "transient": { "cluster.routing.allocation.disk.threshold_enabled": false } }'; curl -XPUT -H "Content-Type: application/json" http://localhost:9200/_all/_settings -d '{"index.blocks.read_only_allow_delete": null}'; php bin/magento indexer:reindex;
 
       # Post update
       php bin/magento module:disable Magento_TwoFactorAuth Magento_AdminAdobeImsTwoFactorAuth
